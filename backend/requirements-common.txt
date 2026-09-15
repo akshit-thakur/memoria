@@ -1,0 +1,42 @@
+fastapi
+uvicorn[standard]
+asyncpg
+alembic
+huey
+watchdog
+exifread
+psycopg[binary]
+pgvector
+python-multipart
+
+# Keep the image ABI deterministic. OpenCV 5 requires NumPy 2, while the
+# deployed FaceNet code and several scientific wheels still use the NumPy 1.x
+# ABI. pillow-heif 1.3+ contains the fix for CVE-2026-28231 and requires a
+# modern Pillow, so these four packages must move as a tested unit.
+numpy==1.26.4
+Pillow==12.3.0
+pillow-heif==1.5.0
+opencv-contrib-python-headless==4.11.0.86
+rawpy>=0.19
+psutil
+
+# Explicit runtime dependencies for the two face packages installed from
+# requirements-managed-no-deps.txt. Installing InsightFace normally would add
+# a second OpenCV distribution and CPU ONNX Runtime even in the GPU profile.
+onnx==1.17.0
+requests>=2.31,<3
+tqdm>=4.66,<5
+scipy>=1.11,<2
+scikit-image>=0.22,<1
+
+# Clustering
+scikit-learn>=1.3
+hdbscan>=0.8.33
+
+# Scene/text embeddings via OpenCLIP / SigLIP.
+open_clip_torch>=2.24
+transformers>=4.50,<5
+sentencepiece>=0.2.0
+
+# SSCD copy-detection runs on torch + torchvision. Its checkpoint is fetched
+# lazily into MEMORIA_MODELS_DIR and is not part of the image.

@@ -1,0 +1,17 @@
+# Pin the mutually compatible facenet release line. On Linux x86 the +cpu
+# local version is an explicit assertion: pip cannot substitute a PyPI wheel
+# whose dependencies include NVIDIA CUDA packages. Linux arm64 wheels are
+# CPU-native and do not use the +cpu suffix. The non-Linux markers keep this
+# profile usable for dependency setup outside the container as well.
+--extra-index-url https://download.pytorch.org/whl/cpu
+-r requirements-common.txt
+torch==2.2.2+cpu; platform_system == "Linux" and (platform_machine == "x86_64" or platform_machine == "AMD64")
+torchvision==0.17.2+cpu; platform_system == "Linux" and (platform_machine == "x86_64" or platform_machine == "AMD64")
+torch==2.2.2; platform_system == "Linux" and (platform_machine == "aarch64" or platform_machine == "arm64")
+torchvision==0.17.2; platform_system == "Linux" and (platform_machine == "aarch64" or platform_machine == "arm64")
+torch==2.2.2; platform_system != "Linux"
+torchvision==0.17.2; platform_system != "Linux"
+
+# ONNX Runtime documents that only one of its CPU/GPU distributions should be
+# installed in an environment. Arm hosts and Apple Docker therefore use CPU.
+onnxruntime==1.23.2

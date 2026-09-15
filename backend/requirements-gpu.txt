@@ -1,0 +1,5 @@
+# CUDA 12.x profile for the opt-in NVIDIA image/host path.
+-r requirements-common.txt
+torch==2.2.2
+torchvision==0.17.2
+onnxruntime-gpu==1.23.2

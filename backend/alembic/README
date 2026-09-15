@@ -1,0 +1,12 @@
+Alembic migrations for Memoria.
+
+From the `backend/` directory (venv activated):
+
+  alembic upgrade head          # apply all pending migrations
+  alembic current               # show current DB revision
+  alembic history               # list all revisions
+  alembic downgrade -1          # roll back one revision
+  alembic revision -m "desc"    # create a new revision
+
+All migrations are idempotent (IF NOT EXISTS / ADD COLUMN IF NOT EXISTS),
+so `upgrade head` is safe to run against a pre-existing schema.

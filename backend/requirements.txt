@@ -1,0 +1,6 @@
+# Portable/default dependency profile. This intentionally selects CPU ONNX
+# Runtime and the official PyTorch CPU wheel index so a plain install never
+# downloads NVIDIA runtime packages. NVIDIA hosts should use
+# ``requirements-gpu.txt`` (``start.sh`` and the GPU Compose overlay do this
+# automatically).
+-r requirements-cpu.txt

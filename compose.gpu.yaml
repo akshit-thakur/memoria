@@ -1,0 +1,15 @@
+services:
+  app:
+    image: ${MEMORIA_GPU_IMAGE:-memoria-core:gpu-local}
+    build:
+      args:
+        PYTHON_BUILDER_IMAGE: nvidia/cuda:${MEMORIA_CUDA_VERSION:-12.4.1}-cudnn-devel-ubuntu22.04
+        PYTHON_RUNTIME_IMAGE: nvidia/cuda:${MEMORIA_CUDA_VERSION:-12.4.1}-cudnn-runtime-ubuntu22.04
+        MEMORIA_REQUIREMENTS: requirements-gpu.txt
+    # Compose 2.30+ GPU reservation shorthand. This is equivalent to an
+    # NVIDIA device reservation for every visible GPU and is intentionally
+    # isolated in the opt-in overlay so the base stack remains CPU-portable.
+    gpus: all
+    environment:
+      NVIDIA_VISIBLE_DEVICES: ${NVIDIA_VISIBLE_DEVICES:-all}
+      NVIDIA_DRIVER_CAPABILITIES: ${NVIDIA_DRIVER_CAPABILITIES:-compute,utility}

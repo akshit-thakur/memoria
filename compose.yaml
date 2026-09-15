@@ -1,0 +1,178 @@
+name: memoria
+
+# Referencing this wrapper-only setting makes Compose expose the fully parsed
+# .env value through `compose config --environment`; start.sh can consume it
+# without sourcing arbitrary Compose dotenv syntax in Docker mode.
+x-memoria-start:
+  compose-wait-seconds: ${MEMORIA_COMPOSE_WAIT_SECONDS:-300}
+
+services:
+  db:
+    image: pgvector/pgvector:0.8.2-pg16
+    restart: unless-stopped
+    command:
+      - postgres
+      - -c
+      - shared_buffers=${PG_SHARED_BUFFERS:-512MB}
+      - -c
+      - effective_cache_size=${PG_EFFECTIVE_CACHE_SIZE:-2GB}
+      - -c
+      - maintenance_work_mem=${PG_MAINTENANCE_WORK_MEM:-256MB}
+      - -c
+      - work_mem=${PG_WORK_MEM:-16MB}
+      - -c
+      - random_page_cost=${PG_RANDOM_PAGE_COST:-4}
+      - -c
+      - max_parallel_workers_per_gather=${PG_MAX_PARALLEL_WORKERS_PER_GATHER:-2}
+      - -c
+      - max_wal_size=${PG_MAX_WAL_SIZE:-1GB}
+    environment:
+      POSTGRES_DB: ${DB_NAME:-memoria}
+      POSTGRES_USER: ${DB_USER:-memoria}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD in .env before starting Compose}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./docker/postgres/init.sql:/docker-entrypoint-initdb.d/10-memoria.sql:ro
+    healthcheck:
+      # Authenticate over TCP. pg_isready alone can report a persisted volume
+      # as healthy even when .env credentials no longer match its original
+      # user/password, leaving the application to fail much later.
+      test:
+        - CMD-SHELL
+        - >-
+          PGPASSWORD="$$POSTGRES_PASSWORD" psql -h 127.0.0.1
+          -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"
+          -qAt -c 'SELECT 1' >/dev/null
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+    # Keep this at least as large as maintenance_work_mem for parallel HNSW
+    # index builds. Environment overrides can scale both together.
+    shm_size: ${PG_SHM_SIZE:-1gb}
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"
+
+  app:
+    image: ${MEMORIA_IMAGE:-memoria-core:local}
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        APP_UID: ${MEMORIA_UID:-1000}
+        APP_GID: ${MEMORIA_GID:-1000}
+        PYTHON_BUILDER_IMAGE: ubuntu:22.04
+        PYTHON_RUNTIME_IMAGE: ubuntu:22.04
+        MEMORIA_REQUIREMENTS: requirements-cpu.txt
+        MEMORIA_INTERNAL_API_URL: http://127.0.0.1:8000
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-}
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      # Always use the Compose network for PostgreSQL. This deliberately
+      # overrides native-runtime DB_HOST/DATABASE_URL values from a shared .env.
+      DATABASE_URL: ""
+      DB_HOST: db
+      DB_PORT: "5432"
+      DB_NAME: ${DB_NAME:-memoria}
+      DB_USER: ${DB_USER:-memoria}
+      DB_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD in .env before starting Compose}
+
+      # Paths outside the container are meaningless inside the image, so
+      # container crawl roots have a separate override from native CRAWL_ROOTS.
+      # /host is mounted read-only for folder-picker scans only (not auto-crawl).
+      CRAWL_ROOTS: ${MEMORIA_CONTAINER_CRAWL_ROOTS:-/media/library}
+      MEMORIA_MEDIA_READ_ONLY: "1"
+
+      # All writable application state is isolated from the read-only media
+      # bind and read-only image filesystem in one persistent named volume.
+      MEMORIA_STATE_DIR: /var/lib/memoria/state
+      MEMORIA_SIDECAR_ROOT: /var/lib/memoria/sidecars
+      MEMORIA_SCAN_INDEX_DB: /var/lib/memoria/sqlite/scan_index.db
+      HUEY_DB: /var/lib/memoria/sqlite/queue.db
+      MEMORIA_CACHE_DIR: /var/lib/memoria/cache/media
+      MEMORIA_EDITS_DIR: /var/lib/memoria/edits
+      MEMORIA_TRASH_DIR: /var/lib/memoria/trash
+      MEMORIA_MODELS_DIR: /var/lib/memoria/models
+      MEMORIA_DEDUP_MODEL_PATH: /var/lib/memoria/models/sscd_disc_mixup.torchscript.pt
+      MEMORIA_YUNET_MODEL_PATH: /var/lib/memoria/models/face_detection_yunet_2023mar.onnx
+      MEMORIA_METRICS_DIR: /var/lib/memoria/metrics
+      XDG_CACHE_HOME: /var/lib/memoria/cache
+      TORCH_HOME: /var/lib/memoria/cache/torch
+      HF_HOME: /var/lib/memoria/cache/huggingface
+
+      # One thread-worker is a memory-safety invariant: ML model singletons
+      # must not be duplicated, regardless of deployment size or accelerator.
+      MEMORIA_HUEY_WORKERS: "1"
+      OMP_NUM_THREADS: ${OMP_NUM_THREADS:-2}
+      MKL_NUM_THREADS: ${MKL_NUM_THREADS:-2}
+      OPENBLAS_NUM_THREADS: ${OPENBLAS_NUM_THREADS:-2}
+      NUMEXPR_NUM_THREADS: ${NUMEXPR_NUM_THREADS:-2}
+      MALLOC_MMAP_THRESHOLD_: ${MALLOC_MMAP_THRESHOLD_:-33554432}
+      MALLOC_TRIM_THRESHOLD_: ${MALLOC_TRIM_THRESHOLD_:-134217728}
+      MEMORIA_BATCH_SIZE: ${MEMORIA_BATCH_SIZE:-16}
+      MEMORIA_RAM_WARN_PCT: ${MEMORIA_RAM_WARN_PCT:-0.85}
+      MEMORIA_RAM_CRIT_PCT: ${MEMORIA_RAM_CRIT_PCT:-0.95}
+      MEMORIA_RAM_FLOOR_PCT: ${MEMORIA_RAM_FLOOR_PCT:-0.90}
+      MEMORIA_RESERVED_MB: ${MEMORIA_RESERVED_MB:-2048}
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-http://localhost:5004,http://127.0.0.1:5004}
+    ports:
+      - "${MEMORIA_BIND_ADDRESS:-127.0.0.1}:${MEMORIA_API_PORT:-8000}:8000"
+      - "${MEMORIA_BIND_ADDRESS:-127.0.0.1}:${MEMORIA_WEB_PORT:-5004}:5004"
+    volumes:
+      - type: bind
+        source: ${MEMORIA_MEDIA_PATH:-./media}
+        target: /media/library
+        read_only: true
+      # Read-only host filesystem for folder-picker resolution.
+      # It defaults to the repo media directory instead of host /, which avoids
+      # Docker Desktop privacy prompts and accidental whole-disk traversal.
+      # Set MEMORIA_HOST_MOUNT to a broader photo parent only when needed.
+      - type: bind
+        source: ${MEMORIA_HOST_MOUNT:-./media}
+        target: /host
+        read_only: true
+      - app_state:/var/lib/memoria
+    read_only: true
+    tmpfs:
+      - /tmp:size=1g,mode=1777
+      - /app/frontend/.next/cache:size=256m,uid=${MEMORIA_UID:-1000},gid=${MEMORIA_GID:-1000},mode=0750
+    shm_size: 1gb
+    stop_grace_period: 45s
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - >-
+          curl -fsS http://127.0.0.1:8000/health >/dev/null &&
+          curl -fsS http://127.0.0.1:5004/ >/dev/null
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      # Bootstrap runs Alembic before Supervisor exposes either HTTP service.
+      # Keep the container in "starting" for the same configurable window used
+      # by start.sh so a legitimate long vector-index repair is not declared
+      # unhealthy early. Successful probes still mark it healthy immediately.
+      start_period: ${MEMORIA_COMPOSE_WAIT_SECONDS:-300}s
+    logging:
+      driver: json-file
+      options:
+        max-size: 25m
+        max-file: "4"
+
+volumes:
+  postgres_data:
+    name: memoria_postgres_data
+  app_state:
+    name: memoria_app_state

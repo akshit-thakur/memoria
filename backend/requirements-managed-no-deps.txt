@@ -1,0 +1,8 @@
+# These leaf packages are deliberately installed with `pip --no-deps` by the
+# Dockerfile and start.sh. Their published metadata conflicts with the tested
+# runtime: facenet-pytorch 2.6.0 caps Pillow below 10.3, while security-fixed
+# pillow-heif requires Pillow 11.1+; InsightFace would install opencv-python and
+# CPU onnxruntime alongside our single OpenCV and profile-selected ORT wheels.
+# All of their actual runtime dependencies are declared in requirements-common.
+facenet-pytorch==2.6.0
+insightface==1.0.1

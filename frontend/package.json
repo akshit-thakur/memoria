@@ -1,0 +1,31 @@
+{
+  "name": "frontend",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "NEXT_TELEMETRY_DISABLED=1 next dev -p 5004",
+    "build": "NEXT_TELEMETRY_DISABLED=1 next build",
+    "postbuild": "mkdir -p .next/standalone/public .next/standalone/.next/static && cp -a public/. .next/standalone/public/ && cp -a .next/static/. .next/standalone/.next/static/",
+    "start": "NEXT_TELEMETRY_DISABLED=1 PORT=${MEMORIA_WEB_PORT:-5004} HOSTNAME=${MEMORIA_WEB_HOST:-127.0.0.1} node .next/standalone/server.js",
+    "lint": "eslint"
+  },
+  "dependencies": {
+    "@tanstack/react-query": "^5.91.0",
+    "@tanstack/react-virtual": "^3.13.23",
+    "lucide-react": "^0.577.0",
+    "maplibre-gl": "^5.23.0",
+    "next": "16.1.7",
+    "react": "19.2.3",
+    "react-dom": "19.2.3"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4",
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "eslint": "^9",
+    "eslint-config-next": "16.1.7",
+    "tailwindcss": "^4",
+    "typescript": "^5"
+  }
+}
